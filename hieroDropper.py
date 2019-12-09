@@ -39,20 +39,21 @@ class BinViewDropHandler:
 
         # get custom hiero objects if drag from one view to another (only present if the drop was from one hiero view to another)
         if hasattr(event, "items"):
-            print "hasItems"
-            print event.items
+            #print "hasItems"
+            #print event.items
+            pass
         
         # figure out which item it was dropped onto
-        print "dropItem: ", event.dropItem
+        #print "dropItem: ", event.dropItem
         
         # get the widget that the drop happened in
-        print "dropWidget: ", event.dropWidget
+        #print "dropWidget: ", event.dropWidget
         
         # get the higher level container widget (for the Bin View, this will be the Bin View widget)
-        print "containerWidget: ", event.containerWidget
+        #print "containerWidget: ", event.containerWidget
         
         # can also get the sender
-        print "eventSender: ", event.sender
+        #print "eventSender: ", event.sender
        
         shotgunDrop(byteArray.data())
 
