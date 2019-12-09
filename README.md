@@ -1,6 +1,12 @@
 # ShotgunDropper for Hiero!
 
-Installation Instructions:
+## Requirements
+- Start Hiero from Shotgun with a running engine
+- Hiero v11+ supported. Versions below 11 can not connect to Shotgun due to TLS incompatibility:
+https://support.shotgunsoftware.com/hc/en-us/articles/360009371913
+
+
+## Installation Instructions:
 
 ## Step 1. Edit app_locations.yml
 Since Shotgun updated their config2 yaml file layouts tank cannot install apps completely by itself (this may be fixed in the future, lets hope so!).
