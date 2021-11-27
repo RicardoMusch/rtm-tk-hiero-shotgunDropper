@@ -33,7 +33,12 @@ class BinViewDropHandler:
         if event.mimeData.hasFormat(BinViewDropHandler.kTextMimeType):
             byteArray = event.mimeData.data(BinViewDropHandler.kTextMimeType)
             print "byteArray:", byteArray.data()
-            
+        
+        # If Shotgun URL in dropdata, assume dropped data is Shotgun Data
+        tk = sgtk.platform.current_engine().sgtk
+        if not str(tk.shotgun_url) in str(byteArray.data()):
+            return False
+
         # signal that we've handled the event here
         event.dropEvent.accept()
 
@@ -157,9 +162,9 @@ def shotgunDrop(droppedArray):
     sg = engine.shotgun
     tk = engine.sgtk
     
-    "If Shotgun URL in dropdata, assume dropped data is Shotgun Data"
-    if not str(tk.shotgun_url) in str(droppedArray):
-        return
+    # "If Shotgun URL in dropdata, assume dropped data is Shotgun Data"
+    # if not str(tk.shotgun_url) in str(droppedArray):
+    #     return
     
     "Dropped Data from Shotgun is usually the same and not an array"
     sgEntityType = droppedArray.split("/")[-2]
