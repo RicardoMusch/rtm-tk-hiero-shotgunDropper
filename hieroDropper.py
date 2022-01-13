@@ -1,5 +1,5 @@
 ######################################
-"Hiero DropData Callback for Shotgun"
+"Hiero DropData Callback for ShotGrid"
 ######################################
 
 import hiero
@@ -8,9 +8,13 @@ import sgtk
 from hiero.core.events import *
 from hiero.core import *
 
+app = sgtk.platform.current_bundle()
 
 # Drop handler for BinView
 class BinViewDropHandler:
+    """ 
+    The Drop handler Class
+    """
     kTextMimeType = "text/plain"
 
     def __init__(self):
@@ -23,7 +27,8 @@ class BinViewDropHandler:
     def dropHandler(self, event):
         
         # get the mime data
-        print("mimeData: {}".format(event.mimeData))
+        #print("mimeData: {}".format(event.mimeData))
+        app.logger.debug("Drop Event MimeData: {}".format(event.mimeData))
 
         # fast/easy way to get at text data
         #if event.mimeData.hasText():
@@ -34,9 +39,10 @@ class BinViewDropHandler:
             byteArray = event.mimeData.data(BinViewDropHandler.kTextMimeType)
             print("byteArray: {}".format(byteArray.data()))
         
-        # If Shotgun URL in dropdata, assume dropped data is Shotgun Data
+        # If ShotGrid URL in dropdata, assume dropped data is ShotGrid Data
         tk = sgtk.platform.current_engine().sgtk
         if not str(tk.shotgun_url) in str(byteArray.data()):
+            app.logger.debug("Ignoring drop event, ShotGrid URL not in dropped data.")
             return False
 
         # signal that we've handled the event here
@@ -66,11 +72,8 @@ class BinViewDropHandler:
         unregisterInterest((EventType.kDrop, EventType.kBin), self.dropHandler)
         hiero.ui.unregisterBinViewCustomMimeDataType(BinViewDropHandler.kTextMimeType)
 
-# Instantiate the handler to get it to register itself.
-dropHandler = BinViewDropHandler()
 
-
-"Custom loggers to write better data to log"
+# Custom loggers to write better data to log
 def logSmall(msg):
     print("-  {}".format(msg))
 def logBig(msg):
@@ -82,19 +85,20 @@ def logBig(msg):
 def shotgunDrop(droppedArray):
 
     def getBin(binName):
-        "Existing Bins"
+        # Existing Bins
         existingBins = clipsBin.bins()
 
         for myBin in existingBins:
             if myBin.name() == binName:
-                "Bin Exists"
+                # Bin Exists
                 return myBin
-        "Bin doesnt exist yet"
+
+        # Bin doesnt exist yet
         myBin = clipsBin.addItem(Bin(binName))
         return myBin
 
     def dropVersion(sgID, sgEntityType):
-        "Find Version"
+        # Find Version
         filters = [ ["id", "is", int(sgID)] ]
         fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
         sgVersion = sg.find_one("Version", filters, fields)
@@ -119,13 +123,13 @@ def shotgunDrop(droppedArray):
         myBin.addItem(BinItem(clip))        
 
     def dropPlaylist(sgID, sgEntityType):
-        "Find Playlist"
+        # Find Playlist
         filters = [ ["id", "is", int(sgID)] ]
         fields = ["code"]
         sgPlaylist = sg.find_one("Playlist", filters, fields)
         print(sgPlaylist)
 
-        "Find Versions in playlist"
+        # Find Versions in playlist
         filters = [ ["playlists", "name_contains",  sgPlaylist["code"] ] ]
         fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
         sgVersions = sg.find("Version", filters, fields)
@@ -133,21 +137,21 @@ def shotgunDrop(droppedArray):
 
         for sgVersion in sgVersions:
 
-            "Load Version into Bin"
+            # Load Version into Bin
             filePath = sgVersion["sg_path_to_frames"]
             if filePath == None:
                 filePath = sgVersion["sg_path_to_movie"]
             if filePath == None:
-                logSmall("Version has no Source paths for Frames or Movies, skipping...")
-                logSmall(str(filePath))
+                app.logger.error("Version has no Source paths for Frames or Movies, skipping...")
+                app.logger.error(str(filePath))
                 return
             if not os.path.exists(os.path.dirname(filePath)):
-                logSmall("The source path doesnt exist, skipping...")
-                logSmall(str(filePath))
+                app.logger.error("The source path doesnt exist, skipping...")
+                app.logger.error(str(filePath))
                 return
             logSmall(str(filePath))
 
-            "Create Clip inside bin"
+            # Create Clip inside bin
             myBin = getBin(sgPlaylist["code"])
             clip = Clip(MediaSource(filePath))
             myBin.addItem(BinItem(clip))  
@@ -156,33 +160,40 @@ def shotgunDrop(droppedArray):
     ##################################################################
     "MAIN CODE"
     ##################################################################
-    "Get Shotgun Instance"
+    # Instantiate the handler to get it to register itself.
+    dropHandler = BinViewDropHandler()
+
+    # Get ShotGrid Instance
     engine = sgtk.platform.current_engine()
     context = engine.context
     sg = engine.shotgun
     tk = engine.sgtk
     
-    # "If Shotgun URL in dropdata, assume dropped data is Shotgun Data"
+    # "If ShotGrid URL in dropdata, assume dropped data is ShotGrid Data"
     # if not str(tk.shotgun_url) in str(droppedArray):
     #     return
     
-    "Dropped Data from Shotgun is usually the same and not an array"
-    sgEntityType = droppedArray.split("/")[-2]
-    logSmall(sgEntityType)
+    # Dropped Data from ShotGrid is usually the same and not an array
+    # Example:
+    #       b'https://acme.shotgunstudio.com/detail/Version/68882'
 
-    sgID = droppedArray.split("/")[-1]
-    logSmall(sgID)
+    sgEntityType = str(droppedArray).split("/")[-2]
+    #logSmall(sgEntityType)
 
-    "get the last loaded project"
+    sgID = str(droppedArray).split("/")[-1]
+    #logSmall(sgID)
+
+    # get the last loaded project
     myProject = projects()[-1]
 
-    "Get The Project ClipsBin"
+    # Get The Project ClipsBin
     clipsBin = myProject.clipsBin()
 
-    
+    # Handle Version Drop
     if sgEntityType == "Version":
         dropVersion(sgID, sgEntityType)
 
+    # Handle Playlist Drop
     if sgEntityType == "Playlist":
         dropPlaylist(sgID, sgEntityType)
 
