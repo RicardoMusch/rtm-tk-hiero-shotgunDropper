@@ -23,7 +23,7 @@ class BinViewDropHandler:
     def dropHandler(self, event):
         
         # get the mime data
-        print "mimeData: ", event.mimeData
+        print("mimeData: {}".format(event.mimeData))
 
         # fast/easy way to get at text data
         #if event.mimeData.hasText():
@@ -32,7 +32,7 @@ class BinViewDropHandler:
         # more complicated way
         if event.mimeData.hasFormat(BinViewDropHandler.kTextMimeType):
             byteArray = event.mimeData.data(BinViewDropHandler.kTextMimeType)
-            print "byteArray:", byteArray.data()
+            print("byteArray: {}".format(byteArray.data()))
         
         # If Shotgun URL in dropdata, assume dropped data is Shotgun Data
         tk = sgtk.platform.current_engine().sgtk
@@ -72,11 +72,11 @@ dropHandler = BinViewDropHandler()
 
 "Custom loggers to write better data to log"
 def logSmall(msg):
-    print "-  "+msg
+    print("-  {}".format(msg))
 def logBig(msg):
-    print "################################"
-    print msg
-    print "################################"
+    print("################################")
+    print(msg)
+    print("################################")
 
 
 def shotgunDrop(droppedArray):
@@ -123,13 +123,13 @@ def shotgunDrop(droppedArray):
         filters = [ ["id", "is", int(sgID)] ]
         fields = ["code"]
         sgPlaylist = sg.find_one("Playlist", filters, fields)
-        print sgPlaylist
+        print(sgPlaylist)
 
         "Find Versions in playlist"
         filters = [ ["playlists", "name_contains",  sgPlaylist["code"] ] ]
         fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
         sgVersions = sg.find("Version", filters, fields)
-        print sgVersions
+        print(sgVersions)
 
         for sgVersion in sgVersions:
 
