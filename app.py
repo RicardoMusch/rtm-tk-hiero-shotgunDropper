@@ -16,7 +16,7 @@ from hiero.core.events import *
 from hiero.core import *
 from sgtk.platform import Application
 
-app = None
+#app = None
 
 class HieroDropperApp(Application):
     """
@@ -61,8 +61,10 @@ class HieroDropperApp(Application):
             # import hieroDropper
 
             # fill the global app var so we can use it elsewhere
-            global app
-            app = self
+            #global app
+            #app = self
+
+            hiero.__app_hierodropper = self
 
             # Instantiate the handler to get it to register itself.
             dropHandler = BinViewDropHandler()
@@ -88,33 +90,34 @@ class BinViewDropHandler:
 
     def dropHandler(self, event):
         
-        # get the mime data
-        #print("mimeData: {}".format(event.mimeData))
-        app.logger.debug("Drop Event MimeData: {}".format(event.mimeData))
-
-        # fast/easy way to get at text data
-        #if event.mimeData.hasText():
-        #  print event.mimeData.text()
-        
-        # more complicated way
+        # Check if teh mimetype is text, otherwise do not accept
         if event.mimeData.hasFormat(BinViewDropHandler.kTextMimeType):
             byteArray = event.mimeData.data(BinViewDropHandler.kTextMimeType)
-            print("byteArray: {}".format(byteArray.data()))
+        else:
+            return False
+
+        # get the logger
+        app = hiero.__app_hierodropper
+
+        # debug logging
+        app.logger.debug("Drop Event MimeData: {}".format(event.mimeData))
         
         # If ShotGrid URL in dropdata, assume dropped data is ShotGrid Data
-        tk = sgtk.platform.current_engine().sgtk
-        if not str(tk.shotgun_url) in str(byteArray.data()):
+        if not str(app.sgtk.shotgun_url) in str(byteArray.data()):
             app.logger.debug("Ignoring drop event, ShotGrid URL not in dropped data.")
             return False
+
+        # Do the ShotGrid Drop logic
+        shotgunDrop(byteArray.data())
 
         # signal that we've handled the event here
         event.dropEvent.accept()
 
         # get custom hiero objects if drag from one view to another (only present if the drop was from one hiero view to another)
-        if hasattr(event, "items"):
+        #if hasattr(event, "items"):
             #print "hasItems"
             #print event.items
-            pass
+            #pass
         
         # figure out which item it was dropped onto
         #print "dropItem: ", event.dropItem
@@ -127,8 +130,7 @@ class BinViewDropHandler:
         
         # can also get the sender
         #print "eventSender: ", event.sender
-    
-        shotgunDrop(byteArray.data())
+        
 
     def unregister(self):
         unregisterInterest((EventType.kDrop, EventType.kBin), self.dropHandler)
