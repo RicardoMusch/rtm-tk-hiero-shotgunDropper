@@ -10,6 +10,7 @@
 
 import sys
 import os
+from pprint import pprint, pformat
 import re
 import sgtk
 import hiero
@@ -78,6 +79,7 @@ class BinViewDropHandler:
         registerInterest((EventType.kDrop, EventType.kBin), self.dropHandler)
 
     def dropHandler(self, event):
+        tk = sgtk.platform.current_engine().sgtk
 
         # get the mime data
         # print("mimeData: {}".format(event.mimeData))
@@ -88,14 +90,14 @@ class BinViewDropHandler:
         #  print event.mimeData.text()
 
         # more complicated way
+        byteArray = None
         if event.mimeData.hasFormat(BinViewDropHandler.kTextMimeType):
             byteArray = event.mimeData.data(BinViewDropHandler.kTextMimeType)
             # print("byteArray: {}".format(byteArray.data()))
 
         # If ShotGrid URL in dropdata, assume dropped data is ShotGrid Data
-        tk = sgtk.platform.current_engine().sgtk
-        if not str(tk.shotgun_url) in str(byteArray.data()):
-            app.logger.debug("Ignoring drop event, ShotGrid URL not in dropped data.")
+        if not byteArray or not str(tk.shotgun_url) in str(byteArray.data()):
+            app.logger.info("Ignoring drop event, ShotGrid URL not in dropped data.")
             return False
 
         # signal that we've handled the event here
@@ -138,63 +140,105 @@ def shotgun_drop(dropped_array):
     entity_id = int((dropped_url.split("/")[-1]).strip("'"))
     app.logger.info("Attempting to Drop {} with id: {}...".format(entity_type, entity_id))
 
-    drop_entity(entity_id, entity_type)
-
-
-def drop_entity(sg_id, entity_type):
-    """
-    Processing either a Version or a Playlist. Version is singular, Playlist can contain many Versions
-    :param sg_id: int - Entity id
-    :param entity_type: str - Entity Type
-    :return: None
-    """
-    global app
-
     # Find Versions
     version_filters = []
+    playlist = None
     if entity_type == 'Version':
-        version_filters = [["id", "is", sg_id]]
+        version_filters = [["id", "is", entity_id]]
+
+        fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
+        version = app.shotgun.find_one("Version", version_filters, fields)
+
+        import_sg_version(version)
 
     elif entity_type == 'Playlist':
         # Find Playlist
-        filters = [['id', 'is', sg_id]]
+        filters = [['id', 'is', entity_id]]
         fields = ['code']
         playlist = app.shotgun.find_one('Playlist', filters, fields)
         if not playlist:
-            raise ValueError(f'Unable to find ShotGrid Playlist #{sg_id}')
+            raise ValueError(f'Unable to find ShotGrid Playlist #{entity_id}')
 
-        version_filters = [['playlists', 'is', {'type': 'Playlist', 'id': sg_id}]]
+        version_filters = [['playlists', 'is', {'type': 'Playlist', 'id': entity_id}]]
 
-    fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
-    versions = app.shotgun.find("Version", version_filters, fields)
+        fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
+        versions = app.shotgun.find("Version", version_filters, fields)
 
+        import_sg_playlist(playlist, versions)
+
+
+def import_sg_playlist(playlist, versions):
+    global app
+    app.logger.info(f'Importing SG Playlist: {playlist["code"]}')
+
+    # Create Sequence and Bin
+    project = hiero.core.projects()[-1]
+
+    clips_bin = project.clipsBin()
+
+    # Create Sequence
+    seq = hiero.core.Sequence(playlist['code'])
+    clips_bin.addItem(hiero.core.BinItem(seq))
+
+    bin = get_bin(playlist["code"])
+
+    # Create Track
+    track = hiero.core.VideoTrack("VideoTrack")
+    seq.addTrack(track)
+
+    # Create Bin Item
+    previous_item = None
     for version in versions:
-        if not version["sg_path_to_frames"] and not version["sg_path_to_movie"]:
-            app.logger.error(f"Version {version['code']} (#{version['id']}) has no "
-                             f"Source paths for Frames or Movies, skipping...")
+        file_path = _get_version_file_path(version)
+        if not file_path:
             continue
 
-        file_path = version["sg_path_to_frames"] or version["sg_path_to_movie"]
+        clip = hiero.core.Clip(hiero.core.MediaSource(file_path))
+        bin.addItem(hiero.core.BinItem(clip))
 
-        # Remap the SG file path to the OS specific file path
-        app.logger.info(f'Remap file path: {file_path}')
-        file_path = remap_file_path_from_sg_storage_path(file_path, app.shotgun)
-        app.logger.info(f'... remapped to: {file_path}')
+        if previous_item:
+            trackItem = track.addTrackItem(clip, previous_item.sourceOut())
+        else:
+            trackItem = track.addTrackItem(clip, 0)
 
-        if not os.path.exists(os.path.dirname(file_path)):
-            app.logger.error(f'The source path "{file_path}" doesnt exist, skipping...')
-            continue
+        previous_item = trackItem
 
-        # Create Clip inside bin
-        if entity_type == 'Playlist':
-            my_bin = get_bin(playlist["code"])
 
-        elif entity_type == 'Version':
-            my_bin = get_bin(app.get_setting("version_bin_name"))
+def import_sg_version(version):
+    global app
+    app.logger.info(f'Importing SG Version: {version["code"]} (#{version["id"]})')
 
-        clip = Clip(MediaSource(file_path))
-        my_bin.addItem(BinItem(clip))
+    # Create Bin
+    bin = get_bin(app.get_setting("version_bin_name"))
 
+    file_path = _get_version_file_path(version)
+    if not file_path:
+        return
+
+    # Create Clip inside bin
+    clip = hiero.core.Clip(hiero.core.MediaSource(file_path))
+    bin.addItem(hiero.core.BinItem(clip))
+
+
+def _get_version_file_path(version):
+    if not version["sg_path_to_frames"] and not version["sg_path_to_movie"]:
+        app.logger.error(f"Version {version['code']} (#{version['id']}) has no "
+                         f"Source paths for Frames or Movies, skipping...")
+        return None
+
+    file_path = version["sg_path_to_frames"] or version["sg_path_to_movie"]
+
+    if not os.path.exists(os.path.dirname(file_path)):
+        app.logger.error(f'The Version {version["code"]} (#{version["id"]}) '
+                         f'source path "{file_path}" doesnt exist, skipping...')
+        return None
+
+    # Remap the SG file path to the OS specific file path
+    app.logger.info(f'Remap file path: {file_path}')
+    file_path = remap_file_path_from_sg_storage_path(file_path, app.shotgun)
+    app.logger.info(f'... remapped to: {file_path}')
+
+    return file_path
 
 def remap_file_path_from_sg_storage_path(path, sg):
     """
@@ -228,19 +272,19 @@ def remap_file_path_from_sg_storage_path(path, sg):
 
 def get_bin(bin_name):
     # get the last loaded project
-    myProject = projects()[-1]
+    my_project = hiero.core.projects()[-1]
 
     # Get The Project ClipsBin
-    clipsBin = myProject.clipsBin()
+    clips_bin = my_project.clipsBin()
 
     # Existing Bins
-    existing_bins = clipsBin.bins()
+    existing_bins = clips_bin.bins()
 
-    for myBin in existing_bins:
-        if myBin.name() == bin_name:
+    for bin in existing_bins:
+        if bin.name() == bin_name:
             # Bin Exists
-            return myBin
+            return bin
 
     # Bin doesnt exist yet
-    myBin = clipsBin.addItem(Bin(bin_name))
-    return myBin
+    bin = clips_bin.addItem(hiero.core.Bin(bin_name))
+    return bin
