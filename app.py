@@ -11,45 +11,36 @@
 import sys
 import os
 import sgtk
-import hiero
-from hiero.core.events import *
-from hiero.core import *
+
+try:
+    import hiero
+    from hiero.core.events import *
+    from hiero.core import *
+except ImportError:
+    pass
 from sgtk.platform import Application
 
 app = None
+
 
 class HieroDropperApp(Application):
     """
     The app entry point. This class is responsible for intializing and tearing down
     the application, handle menu registration etc.
     """
-    
+
     def init_app(self):
         """
         Called as the application is being initialized
         """
 
-        #self.logger.info("###########################")
-        #self.logger.info("Hiero ShotgunDropper")
-        #self.logger.info("###########################")
+        try:
+            import hiero
+        except ImportError:
+            self.logger.info("Not running in a Hiero enabled environment, the app will not be initialized...")
+            return
 
-        # first, we use the special import_module command to access the app module
-        # that resides inside the python folder in the app. This is where the actual UI
-        # and business logic of the app is kept. By using the import_module command,
-        # toolkit's code reload mechanism will work properly.
-        #app_payload = self.import_module("app")
-
-        # now register a *command*, which is normally a menu entry of some kind on a Shotgun
-        # menu (but it depends on the engine). The engine will manage this command and 
-        # whenever the user requests the command, it will call out to the callback.
-
-        # first, set up our callback, calling out to a method inside the app module contained
-        # in the python folder of the app
-        #menu_callback = lambda : app_payload.dialog.show_dialog(self)
-
-        # now register the command with the engine
-        #self.engine.register_command("Show Starter Template App...", menu_callback)
-
+        # Add the callback to the event processor
         self.logger.info("- Loading ShotGridDropper DropData callback for Hiero")
 
         try:
@@ -82,12 +73,12 @@ class BinViewDropHandler:
     def __init__(self):
         # hiero doesn't deal with drag and drop for text/plain data, so tell it to allow it
         hiero.ui.registerBinViewCustomMimeDataType(BinViewDropHandler.kTextMimeType)
-        
+
         # register interest in the drop event now
         registerInterest((EventType.kDrop, EventType.kBin), self.dropHandler)
 
     def dropHandler(self, event):
-        
+
         # get the mime data
         #print("mimeData: {}".format(event.mimeData))
         app.logger.debug("Drop Event MimeData: {}".format(event.mimeData))
@@ -95,12 +86,12 @@ class BinViewDropHandler:
         # fast/easy way to get at text data
         #if event.mimeData.hasText():
         #  print event.mimeData.text()
-        
+
         # more complicated way
         if event.mimeData.hasFormat(BinViewDropHandler.kTextMimeType):
             byteArray = event.mimeData.data(BinViewDropHandler.kTextMimeType)
             print("byteArray: {}".format(byteArray.data()))
-        
+
         # If ShotGrid URL in dropdata, assume dropped data is ShotGrid Data
         tk = sgtk.platform.current_engine().sgtk
         if not str(tk.shotgun_url) in str(byteArray.data()):
@@ -115,19 +106,19 @@ class BinViewDropHandler:
             #print "hasItems"
             #print event.items
             pass
-        
+
         # figure out which item it was dropped onto
         #print "dropItem: ", event.dropItem
-        
+
         # get the widget that the drop happened in
         #print "dropWidget: ", event.dropWidget
-        
+
         # get the higher level container widget (for the Bin View, this will be the Bin View widget)
         #print "containerWidget: ", event.containerWidget
-        
+
         # can also get the sender
         #print "eventSender: ", event.sender
-    
+
         shotgunDrop(byteArray.data())
 
     def unregister(self):
@@ -137,7 +128,6 @@ class BinViewDropHandler:
 
 # Drop callback
 def shotgunDrop(droppedArray):
-
     global app
 
     def getBin(binName):
@@ -155,7 +145,7 @@ def shotgunDrop(droppedArray):
 
     def dropVersion(sgID, sgEntityType):
         # Find Version
-        filters = [ ["id", "is", int(sgID)] ]
+        filters = [["id", "is", int(sgID)]]
         fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
         sgVersion = app.shotgun.find_one("Version", filters, fields)
 
@@ -176,17 +166,17 @@ def shotgunDrop(droppedArray):
         # Create Clip inside bin
         myBin = getBin(app.get_setting("version_bin_name"))
         clip = Clip(MediaSource(filePath))
-        myBin.addItem(BinItem(clip))        
+        myBin.addItem(BinItem(clip))
 
     def dropPlaylist(sgID, sgEntityType):
         # Find Playlist
-        filters = [ ["id", "is", int(sgID)] ]
+        filters = [["id", "is", int(sgID)]]
         fields = ["code"]
         sgPlaylist = app.shotgun.find_one("Playlist", filters, fields)
         app.logger.debug(sgPlaylist)
 
         # Find Versions in playlist
-        filters = [ ["playlists", "name_contains",  sgPlaylist["code"] ] ]
+        filters = [["playlists", "name_contains", sgPlaylist["code"]]]
         fields = ["code", "sg_path_to_frames", "sg_path_to_movie"]
         sgVersions = app.shotgun.find("Version", filters, fields)
         app.logger.debug(sgVersions)
@@ -210,9 +200,9 @@ def shotgunDrop(droppedArray):
             # Create Clip inside bin
             myBin = getBin(sgPlaylist["code"])
             clip = Clip(MediaSource(filePath))
-            myBin.addItem(BinItem(clip))  
+            myBin.addItem(BinItem(clip))
 
-    # ----------------------------------------------------------
+            # ----------------------------------------------------------
 
     # Dropped Data from ShotGrid is usually the same and not an array
     # Example:
